@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Υπολογιστής Μισθού στην Ελλάδα</title>
+    <!-- Σύνδεση Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Πρόσθετα στυλ για τη γραμματοσειρά Inter */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Скрываем стандартное поле ввода файла */
+        .hidden-file-input {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Υπολογιστής Μισθού στην Ελλάδα</h1>
+
+        <!-- Φόρμα για την εισαγωγή δεδομένων υπολογιστή -->
+        <form method="post" class="space-y-6">
+            <div>
+                <label for="brutto" class="block text-gray-700 text-sm font-medium mb-2">Μικτός μισθός (€):</label>
+                <input type="number" name="brutto" id="brutto" required
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       value="{{ request.form['brutto'] if request.method == 'POST' else '' }}">
+            </div>
+
+            <div>
+                <label for="category" class="block text-gray-700 text-sm font-medium mb-2">Κατηγορία εργαζομένου:</label>
+                <select name="category" id="category" required
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="misthotos" {% if request.form['category'] == 'misthotos' %}selected{% endif %}>Μισθωτός</option>
+                    <option value="eleftheros" {% if request.form['category'] == 'eleftheros' %}selected{% endif %}>Ελεύθερος επαγγελματίας</option>
+                    <option value="dimosios" {% if request.form['category'] == 'dimosios' %}selected{% endif %}>Δημόσιος υπάλληλος</option>
+                </select>
+            </div>
+
+            <button type="submit"
+                    class="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition duration-300 ease-in-out shadow-md">
+                Υπολογισμός
+            </button>
+        </form>
+
+        <!-- Εμφάνιση αποτελεσμάτων υπολογισμού και κουμπιού "Αποθήκευση σε Excel" -->
+        {% if result %}
+            <div class="mt-8 pt-6 border-t border-gray-200">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4 text-center">Αποτελέσματα Υπολογισμού:</h2>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
+                        <span class="text-gray-700 font-medium">ΙΚΑ (ασφάλιση):</span>
+                        <span class="text-gray-900 font-bold">{{ "%.2f" | format(ika) }} €</span>
+                    </div>
+                    <div class="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
+                        <span class="text-gray-700 font-medium">Φόρος:</span>
+                        <span class="text-gray-900 font-bold">{{ "%.2f" | format(tax) }} €</span>
+                    </div>
+                    <div class="flex justify-between items-center bg-blue-100 p-3 rounded-lg">
+                        <span class="text-blue-800 font-medium">Καθαρός μισθός:</span>
+                        <span class="text-blue-900 font-bold text-lg">{{ "%.2f" | format(net) }} €</span>
+                    </div>
+                </div>
+
+                <!-- Φόρμα για αποθήκευση σε Excel -->
+                <form action="/download_excel" method="post" class="mt-6">
+                    <!-- Μεταβίβαση των τρεχόντων αποτελεσμάτων ως κρυφών πεδίων -->
+                    <input type="hidden" name="brutto" value="{{ request.form['brutto'] }}">
+                    <input type="hidden" name="category" value="{{ request.form['category'] }}">
+                    <input type="hidden" name="net" value="{{ net }}">
+                    <input type="hidden" name="ika" value="{{ ika }}">
+                    <input type="hidden" name="tax" value="{{ tax }}">
+                    <button type="submit"
+                            class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition duration-300 ease-in-out shadow-md">
+                        Αποθήκευση σε Excel
+                    </button>
+                </form>
+            </div>
+        {% endif %}
+
+        <!-- Ενότητα για φόρτωση δεδομένων και αναφορές -->
+        <div class="mt-8 pt-6 border-t border-gray-200">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4 text-center">Φόρτωση Δεδομένων & Αναφορές</h2>
+
+            <!-- Φόρμα για φόρτωση αρχείων -->
+            <form action="/upload_data" method="post" enctype="multipart/form-data" class="space-y-4">
+                <div>
+                    <label for="file" class="block text-gray-700 text-sm font-medium mb-2">Φόρτωση αρχείου (Excel/PDF):</label>
+                    <!-- Скрытое стандартное поле ввода файла -->
+                    <input type="file" name="file" id="file" required class="hidden-file-input">
+
+                    <!-- Пользовательская кнопка и отображение имени файла -->
+                    <div class="flex items-center space-x-2">
+                        <button type="button" id="custom-file-button"
+                                class="px-4 py-2 rounded-full border-0 text-sm font-semibold bg-purple-50 text-purple-700 hover:bg-purple-100 cursor-pointer">
+                            Επιλογή Αρχείου
+                        </button>
+                        <span id="file-name-display" class="text-gray-600 text-sm">Δεν επιλέχθηκε αρχείο</span>
+                    </div>
+                </div>
+                <button type="submit"
+                        class="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition duration-300 ease-in-out shadow-md">
+                    Φόρτωση Δεδομένων
+                </button>
+            </form>
+
+            <!-- Κουμπί για δημιουργία αναφορών -->
+            <form action="/generate_report" method="get" class="mt-6">
+                <button type="submit"
+                        class="w-full bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-700 transition duration-300 ease-in-out shadow-md">
+                    Δημιουργία Αναφορών
+                </button>
+            </form>
+
+            <!-- Μήνυμα κατάστασης φόρτωσης -->
+            {% if upload_message %}
+            <div class="mt-4 p-3 rounded-lg {% if 'επιτυχώς' in upload_message %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                {{ upload_message }}
+            </div>
+            {% endif %}
+
+            <!-- Εμφάνιση δεδομένων αναφοράς -->
+            {% if report_data %}
+            <div class="mt-4 p-3 rounded-lg bg-blue-100 text-blue-800">
+                <h3 class="font-semibold mb-2">Συνοπτική Αναφορά:</h3>
+                <pre class="whitespace-pre-wrap text-sm">{{ report_data }}</pre>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        // JavaScript для управления пользовательской кнопкой загрузки файла
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileInput = document.getElementById('file');
+            const customButton = document.getElementById('custom-file-button');
+            const fileNameDisplay = document.getElementById('file-name-display');
+
+            // При клике на пользовательскую кнопку, активируем скрытое поле ввода файла
+            customButton.addEventListener('click', function() {
+                fileInput.click();
+            });
+
+            // Когда файл выбран в скрытом поле, обновляем отображаемое имя файла
+            fileInput.addEventListener('change', function() {
+                if (fileInput.files.length > 0) {
+                    fileNameDisplay.textContent = fileInput.files[0].name;
+                } else {
+                    fileNameDisplay.textContent = 'Δεν επιλέχθηκε αρχείο'; // Если файл не выбран
+                }
+            });
+        });
+    </script>
+</body>
+</html>

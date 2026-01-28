@@ -3,13 +3,14 @@ import os
 from flask import Blueprint, render_template, request, jsonify
 from app.models.payroll import PayrollCalculator
 
+# Создаем Blueprint один раз
 main_bp = Blueprint('main', __name__)
 
-# Путь к базе данных (в корне проекта)
+# Путь к базе данных в корне проекта
 DB_PATH = os.path.join(os.getcwd(), 'salary_agent.db')
 
 def init_db():
-    """Создает таблицу, если ее еще нет"""
+    """Инициализация базы данных"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -25,12 +26,23 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Запускаем создание БД
+# Запускаем создание БД при импорте роутов
 init_db()
 
 @main_bp.route('/', methods=['GET'])
 def index():
     return render_template('index.html')
+
+@main_bp.route('/dashboard', methods=['GET'])
+def dashboard():
+    """Страница истории расчетов"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM calculations ORDER BY timestamp DESC LIMIT 20")
+    history = cursor.fetchall()
+    conn.close()
+    return render_template('dashboard.html', history=history)
 
 @main_bp.route('/api/payroll', methods=['POST'])
 def payroll_api():
@@ -38,31 +50,31 @@ def payroll_api():
         data = request.get_json()
 
         if not data or 'gross_salary' not in data or 'contract_type' not in data:
-            return jsonify({"error": "Missing data"}), 400
+            return jsonify({"error": "Missing 'gross_salary' or 'contract_type'"}), 400
 
         gross_salary = float(data['gross_salary'])
         contract_type = data['contract_type']
 
-        # Твой расчет через существующую модель
+        # Расчет
         calculator = PayrollCalculator(gross_salary, contract_type)
         result = calculator.calculate_net()
 
-        # --- СОХРАНЕНИЕ В ПАМЯТЬ ---
+        # СОХРАНЕНИЕ В БАЗУ
         try:
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
             cursor.execute(
                 "INSERT INTO calculations (gross, net, contract_type, ai_comment) VALUES (?, ?, ?, ?)",
-                (gross_salary, result.get('net_salary'), contract_type, "Calculated via API")
+                (gross_salary, result.get('net_salary'), contract_type, "Авто-сохранение")
             )
             conn.commit()
             conn.close()
         except Exception as db_e:
-            print(f"Database error: {db_e}") # Не ломаем ответ, если база капризничает
+            print(f"Database error: {db_e}")
 
         return jsonify(result)
 
     except ValueError:
-        return jsonify({"error": "Invalid salary value"}), 400
+        return jsonify({"error": "Invalid value for 'gross_salary'."}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
